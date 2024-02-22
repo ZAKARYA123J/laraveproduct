@@ -23,39 +23,52 @@ class FileController extends Controller
         // Specify the file path
         $filePath = storage_path('app/' . $path);
     
-        // Check if the file exists
         if (file_exists($filePath)) {
             // Read the contents of the file
             $fileContents = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            array_shift($fileContents); // Remove the first line
-            array_pop($fileContents);
     
-            // Initialize an empty array to store the mapped data
+            // Initialize the mappedData array
             $this->mappedData = [];
+            // Capture the first line of the modified data
+            if (!empty($fileContents)) {
+                $firstLine = [
+                    'truncated_data' => substr($fileContents[0], 0, 139) . substr($fileContents[0], 140),
+                ];
+                $this->mappedData[] = $firstLine;
+            }
     
-            // Iterate through each line in the file
-            foreach ($fileContents as &$line) {
-                // Take only the first 83 characters from each line
+            // Iterate through each line in the file (excluding the first and last lines)
+            for ($i = 1; $i < count($fileContents) - 1; $i++) {
+                $line = $fileContents[$i];
                 $truncatedLine = substr($line, 80, 2);
     
                 if ($truncatedLine !== "00") {
-                    $line = substr_replace($line, "00", 80, 2);
-                    $line = substr_replace($line, "0000", 493, 0);
-                    $line = substr($line, 0, 139) . substr($line, 140);
-                    $line = substr($line, 0, 105) . substr($line, 108);
+                    // Check if the substring at positions 80 to 82 is equal to '  '
+                    if (substr($line, 80, 2) !== '  ') {
+                        $line = substr_replace($line, "00", 80, 2);
+                        $line = substr_replace($line, "0000", 493, 0);
+                        $line = substr($line, 0, 139) . substr($line, 140);
+                        $line = substr($line, 0, 105) . substr($line, 108);
     
-                    $this->mappedData[] = [
-                        'truncated_data' => $line,
-                    ];
+                        $this->mappedData[] = [
+                            'truncated_data' => $line,
+                        ];
+                    }
                 }
             }
     
+            // Capture the last line of the modified data
+            if (!empty($fileContents)) {
+                $lastLine = [
+                    'truncated_data' => substr(end($fileContents), 0, 139) . substr(end($fileContents), 140),
+                ];
+                $this->mappedData[] = $lastLine;
+            }
+    
             // Save the modified contents back to the file
-           // Save the modified contents back to the file
-    $newFileName = $file->getClientOriginalName();
-    $newFilePath = storage_path("app/modified_files/{$newFileName}");
-file_put_contents($newFilePath, implode(PHP_EOL, $fileContents));
-
+            $newFileName = $file->getClientOriginalName();
+            $newFilePath = storage_path("app/modified_files/{$newFileName}");
+            file_put_contents($newFilePath, implode(PHP_EOL, array_column($this->mappedData, 'truncated_data')));
     
             // Do something with the mapped data (e.g., display or process)
             dd($this->mappedData);
@@ -68,13 +81,14 @@ file_put_contents($newFilePath, implode(PHP_EOL, $fileContents));
         }
     
         // Return a response without downloading the file immediately
-        return view('mapAndModify', [
+        return view('file.dowlnd', [
             'mappedData' => $this->mappedData,
-            'downloadLink' => isset($newFilePath) ? asset("storage/modified_files/{$file->getClientOriginalName()}") : null,
+            'downloadLink' => isset($newFilePath) ? asset("storage/modified_files/{$newFileName}") : null,
         ]);
     }
     
-
+    
+    
     public function showForm()
     {
         return view('File.insert');
@@ -91,5 +105,4 @@ file_put_contents($newFilePath, implode(PHP_EOL, $fileContents));
             return response()->json(['error' => 'The modified file does not exist.']);
         }
     }
-    
 }
